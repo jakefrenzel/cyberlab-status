@@ -1,0 +1,6 @@
+# Only what the build needs goes into the build context
+*
+!go.mod
+!go.sum
+!main.go
+!internal/

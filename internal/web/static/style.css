@@ -1,0 +1,81 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --crit: #f85149;
+  --unknown: #8b949e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header.overall {
+  padding: 24px 16px;
+  border-bottom: 4px solid var(--unknown);
+  background: var(--panel);
+}
+header.overall-ok { border-color: var(--ok); }
+header.overall-warn { border-color: var(--warn); }
+header.overall-crit { border-color: var(--crit); }
+
+h1 { margin: 0; font-size: 1.6rem; }
+.summary { margin: 4px 0 0; color: var(--muted); font-size: 1.1rem; }
+.overall-ok .summary { color: var(--ok); }
+.overall-warn .summary { color: var(--warn); }
+.overall-crit .summary { color: var(--crit); }
+
+main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 32px; }
+h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.check {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--unknown);
+  border-radius: 6px;
+}
+.check.level-ok { border-left-color: var(--ok); }
+.check.level-warn { border-left-color: var(--warn); }
+.check.level-crit { border-left-color: var(--crit); }
+
+.value { font-size: 2rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.level-ok .value { color: var(--ok); }
+.level-warn .value { color: var(--warn); }
+.level-crit .value { color: var(--crit); }
+.level-unknown .value { color: var(--unknown); }
+.name { font-weight: 600; }
+.help { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+
+.alerts ul { list-style: none; margin: 0; padding: 0; }
+.alerts li {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--warn);
+  border-radius: 6px;
+}
+.alerts li.alert-critical { border-left-color: var(--crit); }
+.tag, .ns { color: var(--muted); font-size: .85rem; margin-left: 6px; }
+
+footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 0 16px 32px; }
+a { color: #58a6ff; }

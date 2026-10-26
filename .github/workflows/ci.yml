@@ -1,0 +1,99 @@
+# Test, lint, and vulnerability-scan the code, then build the image and scan that too.
+# Nothing is pushed yet; publishing to GHCR and signing come in a separate workflow.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Test / lint / govulncheck
+    runs-on: ubuntu-24.04
+    steps:
+      # Actions are pinned to commit SHAs; a moved tag can't change what runs here
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Every module matches the checksum recorded in go.sum
+      - name: go mod verify
+        run: go mod verify
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+
+      # Go's own vulnerability database; reports only vulnerabilities in code this
+      # program can actually reach
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  image:
+    name: Build / scan image
+    runs-on: ubuntu-24.04
+    needs: go
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: cyberlab-status:ci
+
+      # The image must start, answer its health check, and run as the nonroot user
+      - name: Smoke test
+        run: |
+          test "$(docker image inspect cyberlab-status:ci --format '{{.Config.User}}')" = "65532:65532"
+          docker run -d --name app -p 8080:8080 cyberlab-status:ci
+          for i in $(seq 1 10); do curl -fsS http://localhost:8080/healthz && break; sleep 1; done
+          curl -fsS -o /dev/null http://localhost:8080/
+          docker logs app
+          docker rm -f app
+
+      # Trivy from its official image, pinned by digest like the base images. Fails
+      # on HIGH or CRITICAL vulnerabilities that have a fix available.
+      - name: Trivy
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --no-progress --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed \
+            cyberlab-status:ci
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # scan every commit, not just the latest
+          persist-credentials: false
+
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --redact --verbose --no-banner

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="30">
+  <title>Cyberlab Status</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="overall overall-{{.Overall}}">
+    <h1>Cyberlab Status</h1>
+    <p class="summary">
+      {{- if eq .Overall.String "ok"}}All systems normal
+      {{- else if eq .Overall.String "warn"}}Something needs a look
+      {{- else if eq .Overall.String "crit"}}Something is wrong
+      {{- else}}Can't reach Prometheus{{end -}}
+    </p>
+  </header>
+
+  <main>
+    {{if .Alerts}}
+    <section class="alerts">
+      <h2>Firing alerts</h2>
+      <ul>
+        {{range .Alerts}}
+        <li class="alert-{{.Severity}}"><strong>{{.Name}}</strong> <span class="tag">{{.Severity}}</span>{{if .Namespace}} <span class="ns">{{.Namespace}}</span>{{end}}</li>
+        {{end}}
+      </ul>
+    </section>
+    {{end}}
+
+    {{$results := .Results}}
+    {{range .Sections}}
+    <section>
+      <h2>{{.}}</h2>
+      <div class="grid">
+        {{range section $results .}}
+        <article class="check level-{{.Level}}" title="{{.Help}}">
+          <span class="value">{{value .}}</span>
+          <span class="name">{{.Name}}</span>
+          <span class="help">{{if .Error}}{{.Error}}{{else}}{{.Help}}{{end}}</span>
+        </article>
+        {{end}}
+      </div>
+    </section>
+    {{end}}
+  </main>
+
+  <footer>
+    Checked {{ago .CheckedAt}} ago · refreshes every 30 s · every count is zero when healthy · <a href="/api/status">JSON</a>
+  </footer>
+</body>
+</html>

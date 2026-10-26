@@ -1,0 +1,9 @@
+# Build output
+/cyberlab-status
+/cyberlab-status.exe
+*.test
+*.out
+
+# Editors
+.vscode/
+.idea/

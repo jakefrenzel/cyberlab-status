@@ -1,0 +1,21 @@
+version: "2"
+
+linters:
+  # The defaults (errcheck, govet, ineffassign, staticcheck, unused) plus security
+  # and HTTP-specific checks
+  enable:
+    - gosec
+    - bodyclose
+    - noctx
+    - errorlint
+    - misspell
+  exclusions:
+    rules:
+      # Test fakes write canned responses; a failed write would fail the test anyway
+      - path: _test\.go
+        linters: [errcheck, gosec]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
