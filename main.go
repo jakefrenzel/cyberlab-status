@@ -64,6 +64,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Keep the checks (and the app's metrics) current even when nobody has the page open
+	go checker.Run(ctx)
+
 	errc := make(chan error, 1)
 	go func() {
 		slog.Info("listening", "addr", *listen, "prometheus", *promURL)

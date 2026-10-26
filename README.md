@@ -18,7 +18,7 @@ The app is deliberately small. The point of this repository is the path from `gi
 ## Design
 
 - **Standard library first.** The HTTP server, routing, templates, and the Prometheus API client are all standard library. The only dependency is `prometheus/client_golang` for `/metrics`
-- **Queries are cached for 15 seconds**, and concurrent requests share one refresh, so open browser tabs can't flood Prometheus. All checks run in parallel
+- **Checks refresh in the background every 15 seconds**, all in parallel, and page requests are served from that snapshot, so open browser tabs can't flood Prometheus. Because the refresh doesn't depend on anyone viewing the page, the app's own metrics stay current, and alerts can be built on them
 - **No JavaScript.** The page refreshes with a meta tag, which allows a strict Content-Security-Policy (`default-src 'none'`; styles from this origin only). Everything rendered goes through `html/template`'s escaping
 - **Fails visibly, not silently.** If Prometheus can't be reached, checks show `?` and the page says so; `/healthz` stays up, since restarting the pod wouldn't fix Prometheus
 

@@ -159,6 +159,34 @@ func TestCheckerCaches(t *testing.T) {
 	}
 }
 
+func TestRunRefreshesInBackground(t *testing.T) {
+	fake := &fakeProm{values: map[string]float64{"qa": 0, "qb": 0}}
+	c := NewChecker(fake, testChecks, 10*time.Millisecond, prometheus.NewRegistry())
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		c.Run(ctx)
+		close(done)
+	}()
+
+	// Three refreshes (two queries each) without anyone asking for a snapshot
+	deadline := time.Now().Add(5 * time.Second)
+	for fake.calls.Load() < 6 {
+		if time.Now().After(deadline) {
+			t.Fatalf("only %d queries after 5s; Run isn't refreshing", fake.calls.Load())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run didn't return after its context was cancelled")
+	}
+}
+
 func TestAlertsSortedCriticalFirst(t *testing.T) {
 	fake := &fakeProm{
 		values: map[string]float64{"qa": 0, "qb": 0},

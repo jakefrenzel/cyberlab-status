@@ -97,6 +97,26 @@ func (c *Checker) Snapshot(ctx context.Context) Snapshot {
 	return s
 }
 
+// Run refreshes the snapshot every ttl until ctx is cancelled. Without it the checks
+// only run when someone loads the page, so the app's own metrics (and alerts built
+// on them) would go stale whenever nobody is looking.
+func (c *Checker) Run(ctx context.Context) {
+	t := time.NewTicker(c.ttl)
+	defer t.Stop()
+	for {
+		c.mu.Lock()
+		s := c.refresh(ctx)
+		c.cached = &s
+		c.mu.Unlock()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 func (c *Checker) refresh(ctx context.Context) Snapshot {
 	start := c.now()
 	// Not the request's context: a refresh shared by every waiting request
