@@ -43,6 +43,26 @@ Every push and pull request runs [`ci.yml`](.github/workflows/ci.yml):
 
 Actions are pinned to commit SHAs and the workflow token is read-only.
 
+## Releases
+
+Pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`) runs [`release.yml`](.github/workflows/release.yml):
+
+1. Build the image and scan it with Trivy. Nothing is pushed if the scan fails
+2. Generate an SPDX SBOM (every OS package and Go module in the image)
+3. Push to `ghcr.io/jakefrenzel/cyberlab-status` with SLSA build provenance
+4. Sign the image **by digest** with cosign, and attach the SBOM as a signed attestation
+5. Verify both before the job counts as done
+
+Signing is keyless: the workflow's GitHub OIDC token gets a short-lived certificate from Sigstore that names this repository and workflow, and the signature is recorded in Sigstore's public transparency log. There's no signing key to store or leak. Only this workflow can publish or sign (`packages: write`, `id-token: write`); CI stays read-only.
+
+Anyone can check that an image came from this repository's release workflow:
+
+```bash
+cosign verify ghcr.io/jakefrenzel/cyberlab-status:0.1.0 \
+  --certificate-identity-regexp '^https://github.com/jakefrenzel/cyberlab-status/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ## Running locally
 
 Requires Go 1.27. Against the lab's Prometheus through a port-forward:

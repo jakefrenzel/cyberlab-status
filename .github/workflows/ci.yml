@@ -70,7 +70,7 @@ jobs:
         run: |
           test "$(docker image inspect cyberlab-status:ci --format '{{.Config.User}}')" = "65532:65532"
           docker run -d --name app -p 8080:8080 cyberlab-status:ci
-          for i in $(seq 1 10); do curl -fsS http://localhost:8080/healthz && break; sleep 1; done
+          curl -fsS --retry 10 --retry-delay 1 --retry-connrefused http://localhost:8080/healthz
           curl -fsS -o /dev/null http://localhost:8080/
           docker logs app
           docker rm -f app
