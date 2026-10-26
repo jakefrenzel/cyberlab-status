@@ -52,6 +52,11 @@ Pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`) runs [`releas
 3. Push to `ghcr.io/jakefrenzel/cyberlab-status` with SLSA build provenance
 4. Sign the image **by digest** with cosign, and attach the SBOM as a signed attestation
 5. Verify both before the job counts as done
+6. Open a pull request in [cyberlab-infra](https://github.com/jakefrenzel/cyberlab-infra) that changes the deployed tag and digest. **Merging it is the deploy**: Argo CD syncs `main`
+
+The version is stamped into the binary at build time and shown in the page footer, the JSON, and the `cyberlab_status_build_info` metric.
+
+The deploy PR is opened with a fine-grained token that can only touch `cyberlab-infra` (contents and pull requests). It's stored as a secret of the `infra-bump` environment, which hands it only to jobs running from a `v*` tag, so no branch, pull request, or other workflow can read it. The token expires after 90 days; to rotate it, create a new one with the same scope and run `gh secret set INFRA_PR_TOKEN --env infra-bump -R jakefrenzel/cyberlab-status`.
 
 Signing is keyless: the workflow's GitHub OIDC token gets a short-lived certificate from Sigstore that names this repository and workflow, and the signature is recorded in Sigstore's public transparency log. There's no signing key to store or leak. Only this workflow can publish or sign (`packages: write`, `id-token: write`); CI stays read-only.
 

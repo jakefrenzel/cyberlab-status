@@ -9,8 +9,10 @@ COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
 COPY . .
+# Set by the release workflow; plain builds report "dev"
+ARG VERSION=dev
 # Static binary (no libc needed at runtime), no local paths baked in, no debug info
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/cyberlab-status .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/cyberlab-status .
 
 # Runtime stage: distroless "static" has no shell, package manager, or libc. Just CA
 # certificates, timezone data, and a nonroot user (UID 65532).

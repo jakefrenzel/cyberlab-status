@@ -21,6 +21,9 @@ import (
 	"github.com/jakefrenzel/cyberlab-status/internal/web"
 )
 
+// version is stamped in at build time (-ldflags "-X main.version=..."); see Dockerfile.
+var version = "dev"
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	if err := run(); err != nil {
@@ -46,12 +49,18 @@ func run() error {
 	reg.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+		// Constant 1, labelled with the version: shows which release each pod runs
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name:        "cyberlab_status_build_info",
+			Help:        "Always 1; the version label is the running release.",
+			ConstLabels: prometheus.Labels{"version": version},
+		}, func() float64 { return 1 }),
 	)
 	checker := status.NewChecker(prom, status.DefaultChecks, *cacheTTL, reg)
 
 	srv := &http.Server{
 		Addr:    *listen,
-		Handler: web.NewHandler(checker, reg),
+		Handler: web.NewHandler(checker, reg, version),
 		// Timeouts so a slow or idle client can't hold connections open forever
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
@@ -69,7 +78,7 @@ func run() error {
 
 	errc := make(chan error, 1)
 	go func() {
-		slog.Info("listening", "addr", *listen, "prometheus", *promURL)
+		slog.Info("listening", "addr", *listen, "prometheus", *promURL, "version", version)
 		errc <- srv.ListenAndServe()
 	}()
 

@@ -32,18 +32,19 @@ type Snapshotter interface {
 type handler struct {
 	checker Snapshotter
 	page    *template.Template
+	version string
 }
 
 // NewHandler returns the app's routes. reg is both where the HTTP metrics are
-// registered and what /metrics serves.
-func NewHandler(checker Snapshotter, reg *prometheus.Registry) http.Handler {
+// registered and what /metrics serves; version is shown on the page and in the JSON.
+func NewHandler(checker Snapshotter, reg *prometheus.Registry, version string) http.Handler {
 	page := template.Must(template.New("index.html").Funcs(template.FuncMap{
 		"section": sectionResults,
 		"value":   formatValue,
 		"ago":     func(t time.Time) string { return time.Since(t).Round(time.Second).String() },
 	}).ParseFS(assets, "templates/index.html"))
 
-	h := &handler{checker: checker, page: page}
+	h := &handler{checker: checker, page: page, version: version}
 	static, _ := fs.Sub(assets, "static")
 
 	requests := prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -70,7 +71,7 @@ func (h *handler) servePage(w http.ResponseWriter, r *http.Request) {
 	// Render into a buffer first, so a template error becomes a clean 500
 	// instead of half a page
 	var buf bytes.Buffer
-	if err := h.page.Execute(&buf, pageData{Snapshot: snap, Sections: status.Sections}); err != nil {
+	if err := h.page.Execute(&buf, pageData{Snapshot: snap, Sections: status.Sections, Version: h.version}); err != nil {
 		slog.Error("render page", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -86,7 +87,11 @@ func (h *handler) serveJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(snap); err != nil {
+	body := struct {
+		Version string `json:"version"`
+		status.Snapshot
+	}{h.version, snap}
+	if err := enc.Encode(body); err != nil {
 		slog.Error("encode status", "err", err)
 	}
 }
@@ -114,6 +119,7 @@ func securityHeaders(next http.Handler) http.Handler {
 type pageData struct {
 	status.Snapshot
 	Sections []string
+	Version  string
 }
 
 func sectionResults(results []status.Result, section string) []status.Result {

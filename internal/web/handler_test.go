@@ -19,7 +19,7 @@ type fakeChecker struct{ snap status.Snapshot }
 func (f fakeChecker) Snapshot(context.Context) status.Snapshot { return f.snap }
 
 func newTestHandler(snap status.Snapshot) http.Handler {
-	return NewHandler(fakeChecker{snap}, prometheus.NewRegistry())
+	return NewHandler(fakeChecker{snap}, prometheus.NewRegistry(), "1.2.3")
 }
 
 var sample = status.Snapshot{
@@ -52,6 +52,7 @@ func TestPage(t *testing.T) {
 		"CiliumPolicyDropsHigh",
 		">?<", // unknown check
 		"couldn&#39;t query Prometheus",
+		"cyberlab-status 1.2.3", // version in the footer
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page is missing %q", want)
@@ -113,6 +114,7 @@ func TestRoutes(t *testing.T) {
 func TestJSON(t *testing.T) {
 	rec := get(t, newTestHandler(sample), http.MethodGet, "/api/status")
 	var got struct {
+		Version string `json:"version"`
 		Overall string `json:"overall"`
 		Checks  []struct {
 			ID    string `json:"id"`
@@ -123,7 +125,7 @@ func TestJSON(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v\n%s", err, rec.Body)
 	}
-	if got.Overall != "warn" || len(got.Checks) != 3 || got.Checks[1].Level != "warn" {
+	if got.Version != "1.2.3" || got.Overall != "warn" || len(got.Checks) != 3 || got.Checks[1].Level != "warn" {
 		t.Errorf("unexpected JSON: %+v", got)
 	}
 	// PromQL stays server-side
@@ -134,7 +136,7 @@ func TestJSON(t *testing.T) {
 
 func TestMetricsCountsRequests(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	h := NewHandler(fakeChecker{sample}, reg)
+	h := NewHandler(fakeChecker{sample}, reg, "1.2.3")
 	get(t, h, http.MethodGet, "/")
 	body := get(t, h, http.MethodGet, "/metrics").Body.String()
 	if !strings.Contains(body, `cyberlab_status_http_requests_total{code="200",route="page"} 1`) {

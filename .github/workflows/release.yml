@@ -29,6 +29,9 @@ jobs:
       id-token: write # OIDC token for keyless signing
     env:
       IMAGE: ghcr.io/${{ github.repository }}
+    outputs:
+      version: ${{ steps.tags.outputs.version }}
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,6 +58,7 @@ jobs:
           context: .
           load: true
           tags: cyberlab-status:release
+          build-args: VERSION=${{ steps.tags.outputs.version }}
 
       - name: Trivy gate
         run: |
@@ -87,6 +91,7 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.tags.outputs.list }}
+          build-args: VERSION=${{ steps.tags.outputs.version }}
           provenance: mode=max
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -127,3 +132,70 @@ jobs:
             echo
             echo "Signature and SBOM attestation verified for \`$IDENTITY\`."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Open a pull request in cyberlab-infra that deploys this release. Merging it is the
+  # deploy: Argo CD syncs main. Runs only after the image is signed and verified.
+  bump-infra:
+    name: Open deploy PR in cyberlab-infra
+    runs-on: ubuntu-24.04
+    needs: release
+    # The token is an environment secret: the infra-bump environment only hands it to
+    # jobs running from a v* tag. It's a fine-grained token limited to cyberlab-infra
+    # (contents + pull requests); this repository's own token stays read-only.
+    environment: infra-bump
+    permissions: {}
+    steps:
+      - name: Check inputs
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+          DIGEST: ${{ needs.release.outputs.digest }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad version: $VERSION"; exit 1; }
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "bad digest: $DIGEST"; exit 1; }
+
+      - name: Commit the new tag and digest, open a PR
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_PR_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+          DIGEST: ${{ needs.release.outputs.digest }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          file=k8s/cyberlab-status/kustomization.yaml
+          branch="deploy/cyberlab-status-v$VERSION"
+
+          gh repo clone jakefrenzel/cyberlab-infra infra -- --depth 1
+          cd infra
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+
+          sed -i -E \
+            -e "s|^(    newTag: ).*|\1\"$VERSION\"|" \
+            -e "s|^(    digest: ).*|\1$DIGEST|" "$file"
+          if ! { grep -q "newTag: \"$VERSION\"" "$file" && grep -q "digest: $DIGEST" "$file"; }; then
+            echo "kustomization.yaml didn't take the new values"; cat "$file"; exit 1
+          fi
+          if git diff --quiet; then
+            echo "cyberlab-infra already runs $VERSION@$DIGEST"
+            exit 0
+          fi
+
+          git commit -am "Deploy cyberlab-status v$VERSION"
+          # gh's credential helper supplies the token for the push
+          gh auth setup-git
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "Deploy cyberlab-status v$VERSION" \
+            --body "$(printf '%s\n' \
+              "Deploys [cyberlab-status v$VERSION](https://github.com/jakefrenzel/cyberlab-status/releases/tag/v$VERSION)." \
+              "" \
+              '```' "ghcr.io/jakefrenzel/cyberlab-status:$VERSION@$DIGEST" '```' \
+              "" \
+              "Built, scanned, signed, and verified by [this release run]($RUN_URL). Merging deploys it: Argo CD syncs \`main\`." \
+              "" \
+              "Verify the signature yourself:" \
+              '```bash' \
+              "cosign verify ghcr.io/jakefrenzel/cyberlab-status@$DIGEST \\" \
+              "  --certificate-identity https://github.com/jakefrenzel/cyberlab-status/.github/workflows/release.yml@refs/tags/v$VERSION \\" \
+              "  --certificate-oidc-issuer https://token.actions.githubusercontent.com" \
+              '```')"
